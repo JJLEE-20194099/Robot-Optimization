@@ -1,0 +1,55 @@
+osascript -e 'quit app "Docker"'
+open --background -a Docker
+docker rmi -f $(docker images -a -q)
+
+docker run -it --rm \
+  -p 8765:8765 \
+  -e DISPLAY=host.docker.internal:0 \
+  -e LIBGL_ALWAYS_INDIRECT=1 \
+  -e QT_X11_NO_MITSHM=1 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  osrf/ros:humble-desktop
+
+mkdir -p ~/ros2_ws/src && cd ~/ros2_ws/src
+ros2 pkg create --build-type ament_python drone_controller --dependencies rclpy nav_msgs geometry_msgs
+
+apt update && apt install -y nano
+
+cd ~/ros2_ws/src/drone_controller/drone_controller/
+nano optimizer_path.py
+
+
+nano ~/ros2_ws/src/drone_controller/setup.py
+
+entry_points={
+    'console_scripts': [
+        'lie_publisher = drone_controller.optimizer_path:main',
+    ],
+},
+
+cd ~/ros2_ws/src/drone_controller/drone_controller/
+
+chmod +x optimizer_path.py
+
+cd ~/ros2_ws
+
+rm -rf build/ install/ log/
+
+
+colcon build --packages-select drone_controller
+
+
+source install/setup.bash
+
+ros2 run drone_controller lie_publisher
+
+
+open new terminal:
+
+exec vào container
+
+source /opt/ros/humble/setup.bash
+sudo apt install ros-$ROS_DISTRO-foxglove-bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+
+docker cp 91241c6bcbb8:/root/ros2_ws/src/drone_controller ./src/

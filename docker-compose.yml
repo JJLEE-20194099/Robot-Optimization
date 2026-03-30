@@ -1,0 +1,37 @@
+services:
+
+  foxglove_bridge:
+      build: .
+      platform: linux/amd64
+      container_name: foxglove_bridge
+      ports:
+        - "8765:8765"
+      environment:
+        - ROS_DOMAIN_ID=0
+      command: >
+        ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+
+  drone_optimizer:
+    build: .
+    platform: linux/amd64
+    container_name: drone_optimizer
+    environment:
+      - ROS_DOMAIN_ID=0
+      - DISPLAY=host.docker.internal:0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./src/drone_controller:/ros2_ws/src/drone_controller
+    stdin_open: true
+    tty: true
+    depends_on:
+      - foxglove_bridge
+    command: >
+      bash -c "
+      source /ros2_ws/install/setup.bash &&
+      echo '--- Running Optimizer Node ---' &&
+      python3 -u /ros2_ws/src/drone_controller/drone_controller/optimizer_path.py
+      "
+networks:
+  default:
+    name: ros_mesh_network
+    driver: bridge

@@ -29,7 +29,7 @@ services:
       bash -c "
       source /ros2_ws/install/setup.bash &&
       echo '--- Running Optimizer Node ---' &&
-      python3 -u /ros2_ws/src/drone_controller/drone_controller/optimizer_path.py
+      python3 -u /ros2_ws/src/drone_controller/drone_controller/rrt_path.py
       "
 networks:
   default:

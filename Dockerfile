@@ -2,6 +2,7 @@ FROM --platform=linux/amd64 osrf/ros:humble-desktop
 
 RUN apt-get update && apt-get install -y \
     nano python3-pip ros-humble-foxglove-bridge \
+    ros-humble-xacro \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 uninstall -y numpy

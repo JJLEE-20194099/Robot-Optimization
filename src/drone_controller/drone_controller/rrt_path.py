@@ -46,15 +46,12 @@ class DroneOptimizer(Node):
         self.ray_pub = self.create_publisher(Marker, '/normal_ray', 10)
 
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.static_broadcaster = StaticTransformBroadcaster(self)
-
-
 
         self.path = []       
         self.path_index = 0
         self.current_p = None
 
-        self.publish_static_tf()
+        # self.publish_static_tf()
 
         self.bridge = CvBridge()
         self.start_pos = np.array([0.0, 0.0, 0.0])
@@ -82,10 +79,10 @@ class DroneOptimizer(Node):
 
         self.get_logger().info("Drone Optimizer Node has started!")
 
-    def publish_drone_marker(self, position):
+    def publish_drone_marker(self, position, now_sync):
         marker = Marker()
         marker.header.frame_id = "world"
-        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.stamp = now_sync
 
         marker.type = Marker.SPHERE
         marker.action = Marker.ADD
@@ -317,23 +314,23 @@ class DroneOptimizer(Node):
         self.publish_tree(nodes)
         self.publish_start_goal()
 
-    def publish_camera_data(self):
-        img = np.zeros((100, 100, 3), dtype=np.uint8)
-        cv2.circle(img, (60, 60), 50, (0, 0, 255), -1) 
+    def publish_camera_data(self, timestamp):
+        # Tạo ảnh giả lập (đen với hình tròn đỏ)
+        img = np.zeros((480, 640, 3), dtype=np.uint8) # Khớp với info_msg bên dưới
+        cv2.circle(img, (320, 240), 50, (0, 0, 255), -1) 
         
         img_msg = self.bridge.cv2_to_imgmsg(img, encoding="bgr8")
-        img_msg.header.stamp = self.get_clock().now().to_msg()
+        # QUAN TRỌNG: Dùng chung timestamp với drone_marker và TF
+        img_msg.header.stamp = timestamp
         img_msg.header.frame_id = "camera_link" 
         
-   
         info_msg = CameraInfo()
         info_msg.header = img_msg.header 
-
         info_msg.width = 640
         info_msg.height = 480
         
+        # Ma trận camera (Intrinsic matrix)
         info_msg.k = [500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0]
-        
         info_msg.distortion_model = "plumb_bob"
         info_msg.d = [0.0, 0.0, 0.0, 0.0, 0.0] 
         info_msg.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
@@ -390,6 +387,8 @@ class DroneOptimizer(Node):
         if not hasattr(self, 'current_drone_pos'):
             self.current_drone_pos = np.array([0.0, 0.0, 0.0])
 
+        now = self.get_clock().now().to_msg()
+
         p = self.current_drone_pos
         q = [0, 0, 0, 1]
         
@@ -441,14 +440,13 @@ class DroneOptimizer(Node):
 
         
 
-        self.publish_drone_marker(self.current_p)
         center = np.array([0.0, 0.0, 0.0])
         if p2 is not None:
             self.publish_normal_ray(self.current_p, p2)
         t = TransformStamped()
         t.header.frame_id = "world"
         t.child_frame_id = "base_link"
-        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.stamp = now
 
         t.transform.translation.x = float(p[0])
         t.transform.translation.y = float(p[1])
@@ -460,6 +458,9 @@ class DroneOptimizer(Node):
         t.transform.rotation.w = float(q[3])
 
         self.tf_broadcaster.sendTransform(t)
+
+        self.publish_drone_marker(self.current_p, now)
+        self.publish_camera_data(now)
 
     def publish_path(self, nodes):
         final_node = min(nodes, key=lambda n: np.linalg.norm(n.T[:3, 3] - self.goal_pos))

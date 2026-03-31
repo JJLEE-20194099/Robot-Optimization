@@ -389,7 +389,7 @@ class DroneOptimizer(Node):
 
         now = self.get_clock().now().to_msg()
 
-        p = self.current_drone_pos
+        p = self.current_p if self.current_p is not None else self.current_drone_pos
         q = [0, 0, 0, 1]
         
         p2 = None

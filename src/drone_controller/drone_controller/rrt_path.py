@@ -57,11 +57,11 @@ class DroneOptimizer(Node):
         self.start_pos = np.array([0.0, 0.0, 0.0])
         
         self.start_T = np.eye(4)
-        self.goal_pos = np.array([8.0, 8.0, 8.0])
+        self.goal_pos = np.array([10.0, 10.0, 8.0])
         self.obstacles = [
-            {"center": np.array([4.0, 4.0, 4.0]), "r": 0.2},
-            {"center": np.array([2.0, 6.0, 2.0]), "r": 0.8},
-            {"center": np.array([6.0, 3.0, 7.0]), "r": 0.6}
+            {"center": np.array([4.0, 4.0, 4.0]), "r": 0.8},
+            {"center": np.array([2.0, 6.0, 2.0]), "r": 1.4},
+            {"center": np.array([6.0, 3.0, 7.0]), "r": 1.0}
         ]
 
         self.start_vel = np.zeros(6)

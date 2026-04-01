@@ -10,6 +10,7 @@ from std_msgs.msg import ColorRGBA, Header
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 from scipy.spatial.transform import Rotation
+from scipy.spatial.transform import Slerp
 import cv2
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
@@ -87,7 +88,7 @@ class DroneOptimizer(Node):
 
         self.get_logger().info("Drone Optimizer Node has started!")
 
-    def generate_se3_bspline(self, path_nodes, degree=3, num_samples=200):
+    def generate_se3_bspline(self, path_nodes, degree=3, num_samples=400):
         if len(path_nodes) < degree + 1:
             return [n.T for n in path_nodes]
 
@@ -350,13 +351,45 @@ class DroneOptimizer(Node):
         while curr:
             smooth_path.append(curr)
             curr = curr.parent
+
+        smooth_path = smooth_path[::-1]
+
+        dense_nodes = []
+        last_node = None
+        for i in range(len(smooth_path) - 1):
+            n1 = smooth_path[i]
+            n2 = smooth_path[i+1]
+            if last_node: n1.parent = last_node
+            dense_nodes.append(n1)
+
+            r1 = Rotation.from_matrix(n1.T[:3, :3])
+            r2 = Rotation.from_matrix(n2.T[:3, :3])
+
+            key_times = [0, 1]
+            key_rots = Rotation.from_matrix([n1.T[:3, :3], n2.T[:3, :3]])
+            slerp = Slerp(key_times, key_rots)
+            
+            num_sub_points = 5
+            for j in range(1, num_sub_points):
+                frac = j / num_sub_points
+                interp_T = np.eye(4)
+                interp_T[:3, 3] = (1 - frac) * n1.T[:3, 3] + frac * n2.T[:3, 3]
+                interp_rot = slerp([frac])[0]
+                interp_T[:3, :3] = interp_rot.as_matrix()
+                
+                mid_node = RRTNode(interp_T, np.zeros(6))
+                mid_node.parent = last_node
+                dense_nodes.append(mid_node)
+                last_node = mid_node
         
-        self.path = self.generate_se3_bspline(smooth_path[::-1])
+        dense_nodes.append(smooth_path[-1])
+        
+        self.path = self.generate_se3_bspline(dense_nodes)
         self.path_index = 0
 
         print(f"RRT* optimization completed with {len(nodes)} nodes. Path length: {len(self.path)}")
 
-        self.publish_path(smooth_path[::-1], "rrt")
+        self.publish_path(smooth_path, "rrt")
         self.publish_path(self.path, "spline")
         self.publish_obstacles()
         self.publish_tree(nodes)

@@ -12,8 +12,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'urdf'), glob('resource/*.urdf')),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+        # (os.path.join('share', package_name, 'urdf'), glob('resource/*.urdf')),
+        # (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -28,7 +28,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-		'lie_publisher = drone_controller.optimizer_path:main',
+		# 'lie_publisher = drone_controller.optimizer_path:main',
+		'lie_publisher = drone_controller.bspline_smooth:main',
         ],
     },
 )

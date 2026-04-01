@@ -50,6 +50,9 @@ class DroneOptimizer(Node):
         self.path = []       
         self.path_index = 0
         self.current_p = None
+        self.segment_idx = 0
+        self.t_step = 0.0
+        self.next_p=None
 
         # self.publish_static_tf()
 
@@ -69,7 +72,7 @@ class DroneOptimizer(Node):
         self.target_T[:3,:3] = expm(skew(np.array([0, 0, np.pi/2])))
 
         self.dt = 0.2
-        self.max_iters = 1000
+        self.max_iters = 1500
         self.search_radius = 2.0
         self.run_optimization()
 
@@ -202,6 +205,9 @@ class DroneOptimizer(Node):
     
     def get_pos(self, T):
         return T[:3, 3]
+    
+    def get_bezier_point(self, t, p0, p1, p2, p3):
+        return (1-t)**3 * p0 + 3*(1-t)**2 * t * p1 + 3*(1-t) * t**2 * p2 + t**3 * p3
 
     def orientation_distance(self, T1, T2):
         R1 = T1[:3, :3]
@@ -309,6 +315,11 @@ class DroneOptimizer(Node):
 
         print(f"RRT* optimization completed with {len(nodes)} nodes. Path length: {len(self.path)}", smooth_path[::-1])
 
+        if len(self.path) < 4:
+            self.get_logger().warn("Path too short")
+            while len(self.path) < 4:
+                self.path.append(self.path[-1])
+
         self.publish_path(smooth_path[::-1])
         self.publish_obstacles()
         self.publish_tree(nodes)
@@ -384,73 +395,53 @@ class DroneOptimizer(Node):
 
     def follow_path_step(self):
        
-        if not hasattr(self, 'current_drone_pos'):
-            self.current_drone_pos = np.array([0.0, 0.0, 0.0])
+        if not self.path or self.segment_idx > len(self.path) - 4:
+            return
 
         now = self.get_clock().now().to_msg()
 
-        p = self.current_p if self.current_p is not None else self.current_drone_pos
+        p0 = self.get_pos(self.path[self.segment_idx].T)
+        p1 = self.get_pos(self.path[self.segment_idx + 1].T)
+        p2 = self.get_pos(self.path[self.segment_idx + 2].T)
+        p3 = self.get_pos(self.path[self.segment_idx + 3].T)
+        self.current_p = self.next_p if self.next_p is not None else np.array([0.0, 0.0, 0.0])
+        self.next_p = self.get_bezier_point(self.t_step, p0, p1, p2, p3)
         q = [0, 0, 0, 1]
         
-        p2 = None
-        if hasattr(self, 'path') and len(self.path) >= 2 and self.path_index < len(self.path) - 1:
-            n1 = self.path[self.path_index]
-            n2 = self.path[self.path_index + 1]
-
-            p1 = self.get_pos(n1.T)
-            p2 = self.get_pos(n2.T)
-
-            if self.current_p is None:
-                self.current_p = p1
-
-            direction = p2 - self.current_p
-            dist = np.linalg.norm(direction)
-
-            step_size = 0.1
-            if dist > step_size:
-                self.current_p = self.current_p + (direction / dist) * step_size
-            else:
-                self.current_p = p2
-                self.path_index += 1
-
-    
-
-            if dist > 1e-3:
-                direction = direction / (np.linalg.norm(direction) + 1e-6)
-
-                x_axis = direction
-                z_axis = np.array([0, 0, 1])
-                y_axis = np.cross(z_axis, x_axis)
-                y_axis /= (np.linalg.norm(y_axis) + 1e-6)
-
-                z_axis = np.cross(x_axis, y_axis)
-                R_mat = np.stack([x_axis, y_axis, z_axis], axis=1)
-
-                q = Rotation.from_matrix(R_mat).as_quat()
-
-                rot = Rotation.from_matrix(R_mat)
-                roll, pitch, yaw = rot.as_euler('xyz', degrees=True)
-
-                self.get_logger().info(
-                    f"Yaw: {yaw:.2f}° | Pitch: {pitch:.2f}° | Roll: {roll:.2f}°"
-                )
-
-            else:
-                q = [0, 0, 0, 1]
-
         
+        direction = self.next_p - self.current_p
+        
+        direction = direction / (np.linalg.norm(direction) + 1e-6)
 
-        center = np.array([0.0, 0.0, 0.0])
-        if p2 is not None:
-            self.publish_normal_ray(self.current_p, p2)
+        x_axis = direction
+        z_axis = np.array([0, 0, 1])
+        y_axis = np.cross(z_axis, x_axis)
+        y_axis /= (np.linalg.norm(y_axis) + 1e-6)
+
+        z_axis = np.cross(x_axis, y_axis)
+        R_mat = np.stack([x_axis, y_axis, z_axis], axis=1)
+
+        q = Rotation.from_matrix(R_mat).as_quat()
+
+        rot = Rotation.from_matrix(R_mat)
+        roll, pitch, yaw = rot.as_euler('xyz', degrees=True)
+        
+        self.t_step += 0.02 
+        if self.t_step >= 1.0:
+            self.t_step = 0.0
+            self.segment_idx += 3
+
+
+        if self.next_p is not None:
+            self.publish_normal_ray(self.current_p, self.next_p)
         t = TransformStamped()
         t.header.frame_id = "world"
         t.child_frame_id = "base_link"
         t.header.stamp = now
 
-        t.transform.translation.x = float(p[0])
-        t.transform.translation.y = float(p[1])
-        t.transform.translation.z = float(p[2])
+        t.transform.translation.x = float(self.current_p[0])
+        t.transform.translation.y = float(self.current_p[1])
+        t.transform.translation.z = float(self.current_p[2])
 
         t.transform.rotation.x = float(q[0])
         t.transform.rotation.y = float(q[1])
@@ -522,4 +513,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

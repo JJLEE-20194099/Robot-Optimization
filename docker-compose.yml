@@ -11,21 +11,21 @@ services:
     command: >
       ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
 
-  # drone_launch:
-  #   build: .
-  #   platform: linux/amd64
-  #   container_name: drone_launch
-  #   environment:
-  #     - ROS_DOMAIN_ID=0
-  #   volumes:
-  #     - /tmp/.X11-unix:/tmp/.X11-unix
-  #   stdin_open: true
-  #   tty: true
-  #   command: >
-  #     bash -c "
-  #     source /ros2_ws/install/setup.bash &&
-  #     ros2 launch drone_controller drone_launch.py
-  #     "
+  drone_launch:
+    build: .
+    platform: linux/amd64
+    container_name: drone_launch
+    environment:
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+      source /ros2_ws/install/setup.bash &&
+      ros2 launch drone_controller drone_launch.py
+      "
 
   drone_optimizer:
     build: .
@@ -39,13 +39,13 @@ services:
       - ./src/drone_controller:/ros2_ws/src/drone_controller
     stdin_open: true
     tty: true
-    # depends_on:
-      # - drone_launch
+    depends_on:
+      - drone_launch
     command: >
       bash -c "
       source /ros2_ws/install/setup.bash &&
       echo '--- Running Optimizer Node ---' &&
-      python3 -u /ros2_ws/src/drone_controller/drone_controller/bspline_smooth.py
+      python3 -u /ros2_ws/src/drone_controller/drone_controller/bspline_rrt_path_smooth.py
       "
 
 networks:
